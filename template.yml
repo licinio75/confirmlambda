@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: SAM template para ConfirmLambda que procesa mensajes de SQS y envía correos electrónicos usando SES.
+
+Parameters:
+  SenderEmail:
+    Type: String
+    Description: "Email del remitente que se utilizará para enviar los correos."
+
+Globals:
+  Function:
+    Timeout: 10 # Timeout de la función Lambda
+
+Resources:
+  # Definir la función Lambda
+  ConfirmLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: com.demo.confirmlambda.ConfirmLambda::handleRequest
+      Runtime: java17 # Cambia esto si estás utilizando otra versión de Java
+      CodeUri: ./ # Ruta al código fuente
+      MemorySize: 512
+      Environment:
+        Variables:
+          SENDER_EMAIL: !Ref SenderEmail # El email del remitente se obtiene de un parámetro
+      Events:
+        SQSTrigger:
+          Type: SQS # El tipo de evento es SQS
+          Properties:
+            Queue: arn:aws:sqs:eu-north-1:241825613750:confirmQueue
+      Policies:
+        - AWSLambdaBasicExecutionRole # Permisos básicos de Lambda (logs en CloudWatch)
+        - arn:aws:iam::aws:policy/AmazonSESFullAccess # ARN completo para permisos SES
+        - SQSPollerPolicy: # Permisos para recibir mensajes de la cola SQS
+            QueueName: confirmQueue # Nombre de la cola existente
+
+Outputs:
+  ConfirmLambdaFunction:
+    Description: "Confirm Lambda ARN"
+    Value: !GetAtt ConfirmLambdaFunction.Arn
+
+  SenderEmail:
+    Description: "Email del remitente configurado"
+    Value: !Ref SenderEmail
