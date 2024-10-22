@@ -1,6 +1,7 @@
 package com.demo.confirmlambda;
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.LambdaLogger;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import com.demo.confirmlambda.dto.PedidoSQSMessageDTO;
@@ -12,28 +13,43 @@ import software.amazon.awssdk.services.ses.model.*;
 public class ConfirmLambda implements RequestHandler<SQSEvent, Void> {
 
     private final SesClient sesClient = SesClient.builder().build();
-    private final String senderEmail = System.getenv("SENDER_EMAIL"); // Establece el email del remitente en variables de entorno
+    private final String senderEmail = System.getenv("SENDER_EMAIL");
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
+        LambdaLogger logger = context.getLogger();  // Obtener el logger
+
+        // Log para verificar que la Lambda fue invocada
+        logger.log("Lambda fue invocada con " + event.getRecords().size() + " registros.");
+
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             try {
+                // Log para cada mensaje recibido
+                logger.log("Procesando mensaje: " + message.getBody());
+
                 // Deserializar el mensaje del SQS a PedidoSQSMessageDTO
                 PedidoSQSMessageDTO pedido = objectMapper.readValue(message.getBody(), PedidoSQSMessageDTO.class);
 
+                // Log para verificar que el mensaje fue deserializado correctamente
+                logger.log("Pedido deserializado: " + pedido.toString());
+
                 // Enviar un correo electrónico de confirmación
-                enviarEmailConfirmacion(pedido);
+                enviarEmailConfirmacion(pedido, logger);
             } catch (Exception e) {
-                context.getLogger().log("Error procesando el mensaje: " + e.getMessage());
+                // Log de errores
+                logger.log("Error procesando el mensaje: " + e.getMessage());
             }
         }
         return null;
     }
 
-    private void enviarEmailConfirmacion(PedidoSQSMessageDTO pedido) {
+    private void enviarEmailConfirmacion(PedidoSQSMessageDTO pedido, LambdaLogger logger) {
         String subject = "Confirmación de compra - Pedido " + pedido.getPedidoId();
         String bodyText = generarCuerpoEmail(pedido);
+
+        // Log antes de enviar el correo
+        logger.log("Enviando correo a: " + pedido.getUsuarioEmail());
 
         SendEmailRequest request = SendEmailRequest.builder()
             .destination(Destination.builder().toAddresses(pedido.getUsuarioEmail()).build())
@@ -46,7 +62,14 @@ public class ConfirmLambda implements RequestHandler<SQSEvent, Void> {
             .source(senderEmail)
             .build();
 
-        sesClient.sendEmail(request);
+        try {
+            sesClient.sendEmail(request);
+            // Log después de enviar el correo
+            logger.log("Correo enviado exitosamente a " + pedido.getUsuarioEmail());
+        } catch (Exception e) {
+            // Log si ocurre un error al enviar el correo
+            logger.log("Error enviando correo a " + pedido.getUsuarioEmail() + ": " + e.getMessage());
+        }
     }
 
     private String generarCuerpoEmail(PedidoSQSMessageDTO pedido) {
