@@ -18,38 +18,38 @@ public class ConfirmLambda implements RequestHandler<SQSEvent, Void> {
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
-        LambdaLogger logger = context.getLogger();  // Obtener el logger
+        LambdaLogger logger = context.getLogger();  // Get the logger
 
-        // Log para verificar que la Lambda fue invocada
-        logger.log("Lambda fue invocada con " + event.getRecords().size() + " registros.");
+        // Log to verify that the Lambda was invoked
+        logger.log("Lambda was invoked with " + event.getRecords().size() + " records.");
 
         for (SQSEvent.SQSMessage message : event.getRecords()) {
             try {
-                // Log para cada mensaje recibido
-                logger.log("Procesando mensaje: " + message.getBody());
+                // Log for each message received
+                logger.log("Processing message: " + message.getBody());
 
-                // Deserializar el mensaje del SQS a PedidoSQSMessageDTO
+                // Deserialize the SQS message into PedidoSQSMessageDTO
                 PedidoSQSMessageDTO pedido = objectMapper.readValue(message.getBody(), PedidoSQSMessageDTO.class);
 
-                // Log para verificar que el mensaje fue deserializado correctamente
-                logger.log("Pedido deserializado: " + pedido.toString());
+                // Log to verify the message was deserialized correctly
+                logger.log("Deserialized order: " + pedido.toString());
 
-                // Enviar un correo electrónico de confirmación
-                enviarEmailConfirmacion(pedido, logger);
+                // Send a confirmation email
+                sendConfirmationEmail(pedido, logger);
             } catch (Exception e) {
-                // Log de errores
-                logger.log("Error procesando el mensaje: " + e.getMessage());
+                // Log errors
+                logger.log("Error processing the message: " + e.getMessage());
             }
         }
         return null;
     }
 
-    private void enviarEmailConfirmacion(PedidoSQSMessageDTO pedido, LambdaLogger logger) {
-        String subject = "Confirmación de compra - Pedido " + pedido.getPedidoId();
-        String bodyText = generarCuerpoEmail(pedido);
+    private void sendConfirmationEmail(PedidoSQSMessageDTO pedido, LambdaLogger logger) {
+        String subject = "Purchase Confirmation - Order " + pedido.getPedidoId();
+        String bodyText = generateEmailBody(pedido);
 
-        // Log antes de enviar el correo
-        logger.log("Enviando correo a: " + pedido.getUsuarioEmail());
+        // Log before sending the email
+        logger.log("Sending email to: " + pedido.getUsuarioEmail());
 
         SendEmailRequest request = SendEmailRequest.builder()
             .destination(Destination.builder().toAddresses(pedido.getUsuarioEmail()).build())
@@ -64,21 +64,21 @@ public class ConfirmLambda implements RequestHandler<SQSEvent, Void> {
 
         try {
             sesClient.sendEmail(request);
-            // Log después de enviar el correo
-            logger.log("Correo enviado exitosamente a " + pedido.getUsuarioEmail());
+            // Log after sending the email
+            logger.log("Email successfully sent to " + pedido.getUsuarioEmail());
         } catch (Exception e) {
-            // Log si ocurre un error al enviar el correo
-            logger.log("Error enviando correo a " + pedido.getUsuarioEmail() + ": " + e.getMessage());
+            // Log if there's an error sending the email
+            logger.log("Error sending email to " + pedido.getUsuarioEmail() + ": " + e.getMessage());
         }
     }
 
-    private String generarCuerpoEmail(PedidoSQSMessageDTO pedido) {
+    private String generateEmailBody(PedidoSQSMessageDTO pedido) {
         StringBuilder body = new StringBuilder();
-        body.append("Hola ").append(pedido.getUsuarioNombre()).append(",\n\n");
-        body.append("Gracias por tu compra. Aquí están los detalles de tu pedido:\n\n");
-        body.append("ID del Pedido: ").append(pedido.getPedidoId()).append("\n");
+        body.append("Hello ").append(pedido.getUsuarioNombre()).append(",\n\n");
+        body.append("Thank you for your purchase. Here are the details of your order:\n\n");
+        body.append("Order ID: ").append(pedido.getPedidoId()).append("\n");
 
-        body.append("Productos:\n");
+        body.append("Products:\n");
         for (ItemPedidoDTO item : pedido.getItems()) {
             body.append("- ").append(item.getNombreProducto())
                 .append(" (").append(item.getCantidad()).append(" x $")
@@ -86,9 +86,9 @@ public class ConfirmLambda implements RequestHandler<SQSEvent, Void> {
                 .append(item.getPrecioTotal()).append("\n");
         }
 
-        body.append("\nTotal de la compra: $").append(pedido.getPrecioTotal()).append("\n\n");
-        body.append("Gracias por comprar con nosotros.\n");
-        body.append("Saludos,\nTu Tienda");
+        body.append("\nTotal purchase amount: $").append(pedido.getPrecioTotal()).append("\n\n");
+        body.append("Thank you for shopping with us.\n");
+        body.append("Best regards,\nYour Store");
 
         return body.toString();
     }
